@@ -1,0 +1,22 @@
+# Credenciales y Secretos
+credentials.json
+.streamlit/secrets.toml 
+
+# Archivos de Python compilados y caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Entornos virtuales
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Archivos específicos del SO
+.DS_Store
+Thumbs.db
+
+# Archivos de datos temporales (si usas la carpeta data)
+# data/ 
