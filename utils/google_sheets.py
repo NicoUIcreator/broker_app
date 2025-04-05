@@ -238,7 +238,7 @@ def agregar_o_actualizar_datos(service, spreadsheet_id, nombre_hoja, datos_nuevo
             
             fila_actualizada = fila_nueva[:] # Copiar la fila nueva
             fila_actualizada[0] = id_unico_existente # Conservar ID único
-            fila_actualizada[8] = pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S') # Actualizar fecha
+           # Actualizar fecha
             fila_actualizada[9] = flag_wsp_existente # Conservar flag WSP
             
             # Podríamos añadir una lógica más compleja para decidir si realmente actualizar
