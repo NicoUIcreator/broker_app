@@ -1,11 +1,18 @@
 import streamlit as st
 import os
 import time
+import csv # Needed for CSV conversion
 from google.oauth2.service_account import Credentials
+import io # Needed for CSV upload
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaIoBaseUpload # Needed for CSV upload
 
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+# Add Drive scope for file uploads
+SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/drive.file' # Scope to create files (needed for upload)
+]
 
 # Encabezados estándar para cada nueva hoja de compañía
 ENCABEZADOS = [
@@ -42,6 +49,40 @@ def get_google_sheets_service():
     except Exception as e:
         st.error(f"Error al construir el servicio de Google Sheets: {e}")
         return None
+
+# --- NUEVA FUNCIONALIDAD: OBTENER SERVICIO DE GOOGLE DRIVE ---
+@st.cache_resource
+def get_google_drive_service():
+    """Autentica y devuelve el objeto de servicio de Google Drive."""
+    try:
+        # Intenta cargar desde Streamlit secrets
+        creds_dict = st.secrets["google_credentials"]
+        # Usar los mismos SCOPES que incluyen Drive
+        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        st.success("Autenticación con Google Drive (Secrets) exitosa.")
+    except KeyError:
+        # Intenta cargar desde archivo local
+        local_creds_path = 'credentials.json'
+        if os.path.exists(local_creds_path):
+            creds = Credentials.from_service_account_file(local_creds_path, scopes=SCOPES)
+            st.info("Autenticación con Google Drive (Archivo local) exitosa.")
+        else:
+            st.error("Error: No se encontraron credenciales de Google ni en secrets ni como 'credentials.json'.")
+            return None
+    except Exception as e:
+        st.error(f"Error inesperado durante la autenticación de Google Drive: {e}")
+        return None
+
+    try:
+        # Construir el servicio de Drive v3
+        service = build('drive', 'v3', credentials=creds)
+        return service
+    except Exception as e:
+        st.error(f"Error al construir el servicio de Google Drive: {e}")
+        return None
+
+# --- FIN NUEVA FUNCIONALIDAD ---
+
 
 def verificar_o_crear_hoja(service, spreadsheet_id, nombre_hoja):
     """Verifica si una hoja existe, si no, la crea con los encabezados. Devuelve True si éxito."""
@@ -278,3 +319,61 @@ def agregar_o_actualizar_datos(service, spreadsheet_id, nombre_hoja, datos_nuevo
         # La función agregar_datos_a_hoja ya imprime el mensaje de éxito/error
     
     return cont_agregadas, cont_actualizadas # Devuelve cuentas reales
+
+
+# --- NUEVA FUNCIONALIDAD: SUBIR CSV A DRIVE ---
+def upload_csv_to_drive(drive_service, sheet_data, filename, folder_id=None):
+    """
+    Convierte los datos de la hoja (lista de listas) a CSV y los sube a Google Drive.
+    Devuelve el ID del archivo creado o None si falla.
+    """
+    if not drive_service:
+        st.error("Servicio de Google Drive no disponible.")
+        return None
+    if not sheet_data:
+        st.warning("No hay datos para exportar a CSV.")
+        return None
+
+    try:
+        # Convertir lista de listas a CSV en memoria
+        output = io.StringIO()
+        writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
+        writer.writerows(sheet_data)
+        csv_content = output.getvalue()
+        output.close()
+
+        # Preparar metadatos del archivo
+        file_metadata = {
+            'name': f"{filename}.csv",
+            'mimeType': 'text/csv'
+        }
+        # Si se proporciona un folder_id, añadirlo a los parents
+        if folder_id:
+            file_metadata['parents'] = [folder_id]
+
+        # Preparar el contenido multimedia
+        media = io.BytesIO(csv_content.encode('utf-8')) # Drive API espera bytes
+        media_body = MediaIoBaseUpload(media, mimetype='text/csv', resumable=True)
+
+        # Crear el archivo en Drive
+        file = drive_service.files().create(
+            body=file_metadata,
+            media_body=media_body,
+            fields='id' # Pedir solo el ID del archivo creado
+        ).execute()
+
+        file_id = file.get('id')
+        st.success(f"Archivo '{filename}.csv' subido a Google Drive con ID: {file_id}")
+        # Podríamos devolver un enlace al archivo si quisiéramos más info
+        # file_link = f"https://drive.google.com/file/d/{file_id}/view"
+        # st.info(f"Enlace: {file_link}")
+        return file_id
+
+    except HttpError as error:
+        st.error(f"Error de API al subir CSV a Drive: {error}")
+        st.error(f"Detalles: {error.content}")
+        return None
+    except Exception as e:
+        st.error(f"Error inesperado al subir CSV a Drive: {e}")
+        return None
+# --- FIN NUEVA FUNCIONALIDAD ---

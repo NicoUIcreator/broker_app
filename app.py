@@ -7,12 +7,21 @@ from utils.google_sheets import (
       obtener_nombres_hojas,
       leer_datos_hoja,
       actualizar_flag_wsp,
-      ENCABEZADOS # Importar encabezados para usarlos en la visualización
+      ENCABEZADOS, # Importar encabezados para usarlos en la visualización
+      # Nuevas importaciones para Drive
+      get_google_drive_service,
+      upload_csv_to_drive
   )
 from utils.data_processing import (
       leer_excel_subido,
       preparar_datos_para_hoja
   )
+# Import WhatsApp utility functions
+from utils.whatsapp_messaging import (
+    initialize_whatsapp_client,
+    send_whatsapp_message,
+    format_message
+)
 
   # --- Configuración de la Página ---
 st.set_page_config(
@@ -24,8 +33,12 @@ st.set_page_config(
   # --- Estado de Sesión ---
 if 'logged_in' not in st.session_state:
       st.session_state.logged_in = False
-if 'service' not in st.session_state:
+if 'service' not in st.session_state: # Servicio de Sheets
       st.session_state.service = None
+if 'drive_service' not in st.session_state: # Servicio de Drive
+      st.session_state.drive_service = None
+if 'whatsapp_client' not in st.session_state: # Nuevo: Cliente WhatsApp
+      st.session_state.whatsapp_client = None
 if 'spreadsheet_id' not in st.session_state:
        # Cargar desde secrets si está disponible
        try:
@@ -48,13 +61,19 @@ def check_login():
           st.session_state.logged_in = True
           # Limpiar contraseña del estado después de verificar
           del st.session_state["password"] 
-          # Intentar obtener el servicio de sheets al loguearse
-          st.session_state.service = get_google_sheets_service()
+          # Intentar obtener los servicios de Google al loguearse
+          st.session_state.service = get_google_sheets_service() # Sheets
+          st.session_state.drive_service = get_google_drive_service() # Drive
+          st.session_state.whatsapp_client = initialize_whatsapp_client() # WhatsApp (Placeholder)
+
+          # Verificar servicios y configuraciones
           if not st.session_state.service:
                st.warning("Login exitoso, pero hubo un problema al conectar con Google Sheets.")
+          if not st.session_state.drive_service:
+               st.warning("Login exitoso, pero hubo un problema al conectar con Google Drive.")
           if not st.session_state.spreadsheet_id:
                st.warning("Login exitoso, pero no se configuró el SPREADSHEET_ID en secrets.toml.")
-               
+
       else:
           st.session_state.logged_in = False
           st.error("Usuario o contraseña incorrectos.")
@@ -80,19 +99,31 @@ else:
       st.sidebar.markdown("---")
       if st.sidebar.button("Cerrar Sesión"):
           st.session_state.logged_in = False
-          st.session_state.service = None # Limpiar servicio al salir
-          st.experimental_rerun() # Recargar la app para volver al login
+          st.session_state.service = None # Limpiar servicio Sheets
+          st.session_state.drive_service = None # Limpiar servicio Drive
+          st.session_state.whatsapp_client = None # Limpiar cliente WhatsApp
+          st.rerun() # Recargar la app para volver al login
 
-      # Verificar conexión a Google Sheets
+      # Verificar conexiones a Google Sheets y Drive
+      sheets_ok = True
+      drive_ok = True
       if not st.session_state.service:
            st.error("No se pudo establecer conexión con Google Sheets. Verifica las credenciales y la conexión a internet.")
-           st.stop() # Detener la ejecución si no hay servicio
+           sheets_ok = False
+      if not st.session_state.drive_service:
+           st.warning("No se pudo establecer conexión con Google Drive. La exportación a CSV no estará disponible.")
+           drive_ok = False # Aún se puede usar la app sin Drive
       if not st.session_state.spreadsheet_id:
-           st.error("El ID de la Hoja de Cálculo no está configurado en secrets.toml ([google_sheets] > spreadsheet_id).")
+           st.error("El ID de la Hoja de Cálculo (spreadsheet_id) no está configurado en secrets.toml ([google_sheets]).")
+           sheets_ok = False
+           
+      # Detener solo si Sheets falla, ya que es esencial
+      if not sheets_ok:
            st.stop()
 
       spreadsheet_id = st.session_state.spreadsheet_id
-      service = st.session_state.service
+      service = st.session_state.service # Servicio de Sheets
+      drive_service = st.session_state.drive_service # Servicio de Drive (puede ser None)
 
       # --- Modo: Cargar Datos desde Excel ---
       if app_mode == "Cargar Datos desde Excel":
@@ -245,24 +276,160 @@ else:
                                            st.success("¡Estado actualizado! Refresca los datos si es necesario.")
                                        else:
                                            st.error("No se pudo actualizar el estado.")
-                                           
+                           
+                           st.markdown("---")
+                           # --- Acción: Exportar a CSV ---
+                           st.markdown("**Exportar Datos a Google Drive:**")
+                           # Opcional: Pedir ID de carpeta de Drive
+                           # drive_folder_id = st.text_input("ID de Carpeta en Google Drive (opcional, dejar vacío para raíz)")
+                           drive_folder_id = None # Por ahora, subir a la raíz
+
+                           if st.button(f"Exportar '{hoja_seleccionada}' a CSV en Drive", disabled=(not drive_ok or not datos_crudos)):
+                               if drive_service and datos_crudos:
+                                   filename = f"Export_{hoja_seleccionada}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}"
+                                   with st.spinner(f"Exportando '{filename}.csv' a Google Drive..."):
+                                       file_id = upload_csv_to_drive(drive_service, datos_crudos, filename, drive_folder_id)
+                                       if file_id:
+                                           # Opcional: Mostrar enlace
+                                           st.info(f"Archivo creado en Google Drive. Puedes buscarlo por el nombre '{filename}.csv'.")
+                                       else:
+                                           st.error("Falló la exportación a Google Drive.")
+                               elif not drive_ok:
+                                    st.error("La conexión con Google Drive no está disponible.")
+                               else:
+                                    st.warning("No hay datos para exportar.")
+
                       elif len(datos_crudos) == 1 and datos_crudos[0] == ENCABEZADOS:
                            st.info("La hoja contiene solo los encabezados. Aún no hay datos de clientes.")
-                      else:
-                           st.info(f"No se encontraron datos de clientes en la hoja '{hoja_seleccionada}'.")
-                  else:
+                      else: # datos_crudos es [] o None
+                           st.info(f"No se encontraron datos válidos en la hoja '{hoja_seleccionada}' para mostrar o exportar.")
+                  else: # datos_crudos es None (error al leer)
                       st.error(f"No se pudieron cargar los datos de '{hoja_seleccionada}'.")
 
-      # --- Modo: Enviar Mensajes (Placeholder) ---
-      elif app_mode == "Enviar Mensajes (Próximamente)":
+      # --- Modo: Enviar Mensajes ---
+      elif app_mode == "Enviar Mensajes (Próximamente)": # Mantener nombre hasta que funcione
           st.title(" Envío de Mensajes Personalizados (WhatsApp)")
-          st.image("https://img.freepik.com/free-vector/coming-soon-display-background-with-focus-light_1017-33741.jpg", width=400)
-          st.info("Esta funcionalidad está en desarrollo.")
-          st.markdown("""
-          **Próximos pasos:**
-          *   Integración con una API de WhatsApp (como Twilio, Meta Cloud API, o alternativas).
-          *   Selección de clientes (filtrando por 'Mensaje_WSP_Enviado' = FALSE).
-          *   Plantillas de mensajes personalizables (usando datos del cliente como Nombre, Póliza, etc.).
-          *   Actualización automática del flag 'Mensaje_WSP_Enviado' a TRUE tras envío exitoso.
-          *   Manejo de errores y logs de envío.
-          """)
+
+          # Verificar cliente WhatsApp (placeholder por ahora)
+          whatsapp_client = st.session_state.whatsapp_client
+          if not whatsapp_client:
+              st.error("El cliente de WhatsApp no está inicializado. Verifica la configuración en secrets.toml (cuando implementes la API real).")
+              st.stop()
+
+          # 1. Seleccionar Compañía/Hoja
+          nombres_existentes_wsp = obtener_nombres_hojas(service, spreadsheet_id)
+          if not nombres_existentes_wsp:
+              st.warning("Aún no se han cargado datos de ninguna compañía para enviar mensajes.")
+              st.stop()
+
+          hoja_seleccionada_wsp = st.selectbox(
+              "Selecciona la Compañía (Hoja) para enviar mensajes",
+              options=nombres_existentes_wsp,
+              key="wsp_hoja_select"
+          )
+
+          if hoja_seleccionada_wsp:
+              st.subheader(f"Enviar mensajes a clientes de: {hoja_seleccionada_wsp}")
+
+              # 2. Cargar y filtrar clientes pendientes
+              with st.spinner(f"Cargando clientes pendientes de '{hoja_seleccionada_wsp}'..."):
+                  datos_crudos_wsp = leer_datos_hoja(service, spreadsheet_id, hoja_seleccionada_wsp)
+
+              if datos_crudos_wsp is None or len(datos_crudos_wsp) <= 1:
+                  st.info(f"No se encontraron datos de clientes o solo encabezados en '{hoja_seleccionada_wsp}'.")
+                  st.stop()
+
+              header_wsp = ENCABEZADOS if datos_crudos_wsp[0] == ENCABEZADOS else datos_crudos_wsp[0]
+              data_start_row_wsp = 1 # Asumimos que siempre hay encabezado o queremos ignorar la fila 0 si no es el estándar
+
+              df_clientes_wsp = pd.DataFrame(datos_crudos_wsp[data_start_row_wsp:], columns=header_wsp)
+              # Añadir número de fila original (importante para actualizar el flag)
+              df_clientes_wsp['__row_number__'] = range(data_start_row_wsp + 1, len(datos_crudos_wsp) + 1)
+
+              # Filtrar por Mensaje_WSP_Enviado == FALSE o vacío
+              df_pendientes = df_clientes_wsp[
+                  df_clientes_wsp['Mensaje_WSP_Enviado'].str.upper().isin(['FALSE', ''])
+              ].copy() # Usar .copy() para evitar SettingWithCopyWarning
+
+              if df_pendientes.empty:
+                  st.success(f"¡Todos los clientes de '{hoja_seleccionada_wsp}' ya tienen el mensaje marcado como enviado!")
+                  st.stop()
+
+              st.markdown(f"Se encontraron **{len(df_pendientes)}** clientes pendientes de envío.")
+
+              # 3. Selección de Clientes
+              st.markdown("**Selecciona los clientes a los que deseas enviar mensaje:**")
+              # Crear identificadores únicos para el multiselect
+              df_pendientes['display_name'] = df_pendientes['Nombre_Apellido'] + " (ID: " + df_pendientes['Numero_Identificacion'] + ", Tel: " + df_pendientes['Numero_Telefono_1'] + ")"
+              
+              clientes_seleccionados_display = st.multiselect(
+                  "Clientes Pendientes",
+                  options=df_pendientes['display_name'].tolist(),
+                  # default=df_pendientes['display_name'].tolist() # Descomentar para seleccionar todos por defecto
+              )
+
+              # Obtener los datos completos de los clientes seleccionados
+              df_seleccionados = df_pendientes[df_pendientes['display_name'].isin(clientes_seleccionados_display)]
+
+              # 4. Plantilla de Mensaje
+              st.markdown("**Escribe tu plantilla de mensaje:**")
+              st.markdown("Puedes usar placeholders como `{Nombre_Apellido}`, `{Numero_Identificacion}`, etc., que se reemplazarán con los datos del cliente.")
+              # Mostrar columnas disponibles como placeholders
+              st.caption(f"Columnas disponibles: {', '.join(header_wsp)}")
+
+              mensaje_template = st.text_area("Plantilla del Mensaje:", height=150, value="Hola {Nombre_Apellido}, te contactamos para...")
+
+              # 5. Botón de Envío
+              st.markdown("---")
+              if st.button(f"Enviar {len(df_seleccionados)} Mensajes (Simulación)", disabled=(len(df_seleccionados) == 0)):
+                  if not mensaje_template:
+                      st.warning("Por favor, escribe un mensaje.")
+                  else:
+                      st.subheader("Resultados del Envío (Simulación):")
+                      exitos = 0
+                      fallos = 0
+                      
+                      # Barra de progreso
+                      progress_bar = st.progress(0)
+                      status_text = st.empty()
+
+                      for i, (index, cliente) in enumerate(df_seleccionados.iterrows()):
+                          nombre_cliente = cliente['Nombre_Apellido']
+                          telefono_cliente = cliente['Numero_Telefono_1']
+                          fila_original = cliente['__row_number__']
+                          
+                          # Convertir la fila del DataFrame a un diccionario para formatear
+                          datos_cliente_dict = cliente.to_dict()
+
+                          status_text.text(f"Procesando {i+1}/{len(df_seleccionados)}: {nombre_cliente}...")
+
+                          # Formatear mensaje
+                          mensaje_final = format_message(mensaje_template, datos_cliente_dict)
+                          st.text_area(f"Mensaje para {nombre_cliente}:", value=mensaje_final, height=100, disabled=True, key=f"msg_{index}")
+
+                          # Enviar mensaje (simulado)
+                          enviado_ok = send_whatsapp_message(whatsapp_client, telefono_cliente, mensaje_final, nombre_cliente)
+
+                          # Actualizar flag en Google Sheet si el envío fue exitoso
+                          if enviado_ok:
+                              actualizado_ok = actualizar_flag_wsp(service, spreadsheet_id, hoja_seleccionada_wsp, fila_original, True)
+                              if actualizado_ok:
+                                  st.caption(f"Flag actualizado a TRUE para {nombre_cliente} en Google Sheets.")
+                                  exitos += 1
+                              else:
+                                  st.warning(f"Mensaje enviado (simulado) a {nombre_cliente}, pero falló la actualización del flag en Google Sheets.")
+                                  # Considerar esto como fallo parcial o total? Por ahora cuenta como éxito de envío.
+                                  exitos += 1 # O decidir si contar como fallo si el flag no se actualiza
+                          else:
+                              fallos += 1
+                          
+                          # Actualizar progreso
+                          progress_bar.progress((i + 1) / len(df_seleccionados))
+                          st.markdown("---") # Separador visual
+
+                      status_text.text("Proceso de envío completado.")
+                      st.subheader("Resumen del Envío (Simulación):")
+                      st.success(f"Mensajes enviados exitosamente (simulado): {exitos}")
+                      st.error(f"Mensajes fallidos: {fallos}")
+                      st.info("Recuerda que esto es una simulación. Deberás configurar una API real y reemplazar las funciones en utils/whatsapp_messaging.py.")
+                      # Podríamos añadir un botón para refrescar los datos de pendientes
