@@ -52,13 +52,18 @@ def preparar_datos_para_hoja(df_compania, nombre_compania):
       map_dni = None
       colonna_reales = list(df_compania.columns)  
       
-      # Primero buscamos columnas con nombres esperados normalizados
+      # Buscar columna identificadora (prioridad: contrato > poliza > dni)
       map_dni = next((col for i, col in enumerate(colonna_reales) 
-                    if 'dni' in columnas_normalizadas[i] or 'identificacion' in columnas_normalizadas[i]), None)
+                    if 'contrato' in columnas_normalizadas[i]), None)
       
       if not map_dni:
           map_dni = next((col for i, col in enumerate(colonna_reales) 
-                        if 'contrato' in columnas_normalizadas[i] or 'poliza' in columnas_normalizadas[i]), None)
+                        if 'poliza' in columnas_normalizadas[i]), None)
+      
+      # Si no encontramos contrato ni poliza, buscar dni como último recurso
+      if not map_dni:
+          map_dni = next((col for i, col in enumerate(colonna_reales) 
+                        if 'dni' in columnas_normalizadas[i] or 'identificacion' in columnas_normalizadas[i]), None)
 
       map_nombre = next((col for i, col in enumerate(colonna_reales) 
                        if ('nombre' in columnas_normalizadas[i] or 
@@ -112,7 +117,7 @@ def preparar_datos_para_hoja(df_compania, nombre_compania):
 
               # Validar datos mínimos
               if not num_id or not nombre:
-                  st.warning(f"Fila {index+2} omitida por falta de DNI o Nombre.")
+                  st.warning(f"Fila {index+2} omitida por falta de datos en {map_dni} o {map_nombre}.")
                   continue
 
               # --- Crear la fila con la estructura estándar ---
