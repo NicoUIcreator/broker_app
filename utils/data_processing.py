@@ -52,19 +52,7 @@ def preparar_datos_para_hoja(df_compania, nombre_compania):
       map_dni = None
       colonna_reales = list(df_compania.columns)  
       
-      # Buscar columna identificadora (prioridad: contrato > poliza > dni)
-      map_dni = next((col for i, col in enumerate(colonna_reales) 
-                    if 'contrato' in columnas_normalizadas[i]), None)
-      
-      if not map_dni:
-          map_dni = next((col for i, col in enumerate(colonna_reales) 
-                        if 'poliza' in columnas_normalizadas[i]), None)
-      
-      # Si no encontramos contrato ni poliza, buscar dni como último recurso
-      if not map_dni:
-          map_dni = next((col for i, col in enumerate(colonna_reales) 
-                        if 'dni' in columnas_normalizadas[i] or 'identificacion' in columnas_normalizadas[i]), None)
-
+      # Buscar solo columna de nombre (único campo requerido)
       map_nombre = next((col for i, col in enumerate(colonna_reales) 
                        if ('nombre' in columnas_normalizadas[i] or 
                            'apellido' in columnas_normalizadas[i] or
@@ -96,29 +84,33 @@ def preparar_datos_para_hoja(df_compania, nombre_compania):
                            'tipodocumento' in columnas_normalizadas[i] or
                            'documento' in columnas_normalizadas[i]), 'DNI') # Valor por defecto
 
-      # Validar que las columnas mínimas existan
-      if not map_dni or not map_nombre:
-           st.error(f"¡Error crítico! No se encontraron columnas de DNI o Nombre en el Excel de {nombre_compania}. Columnas encontradas: {df_compania.columns.tolist()}")
-           return [] # Devolver vacío si no hay datos esenciales
+      # Validar que la columna de nombre exista (único campo requerido)
+      if not map_nombre:
+           st.error(f"¡Error crítico! No se encontró columna de Nombre/Tomador en el Excel de {nombre_compania}. Columnas encontradas: {df_compania.columns.tolist()}")
+           return [] # Devolver vacío si no hay nombre
 
       for index, row in df_compania.iterrows():
           try:
-              # Extraer datos usando los mapeos (con manejo de nulos)
-              num_id = str(row[map_dni]) if map_dni and pd.notna(row[map_dni]) else ''
+              # Extraer datos - generamos ID automático siempre usando prefijo de compañía
+              num_id = f"ID_{nombre_compania[:3]}_{index}"
               nombre = str(row[map_nombre]) if map_nombre and pd.notna(row[map_nombre]) else ''
               telefono1 = str(row[map_tel]) if map_tel and pd.notna(row[map_tel]) else ''
               id_cliente_compania = str(row[map_id_comp]) if map_id_comp and pd.notna(row[map_id_comp]) else ''
               email = str(row[map_email]) if map_email and pd.notna(row[map_email]) else ''
               tipo_id = str(row[map_tipo_id]) if map_tipo_id and pd.notna(row[map_tipo_id]) else 'DNI' # Valor por defecto
               
-              # Limpieza básica (ejemplo)
+              # Limpieza básica
               num_id = num_id.replace('.', '').replace('-', '').strip()
               telefono1 = ''.join(filter(str.isdigit, telefono1)) # Dejar solo dígitos en teléfono
 
-              # Validar datos mínimos
-              if not num_id or not nombre:
-                  st.warning(f"Fila {index+2} omitida por falta de datos en {map_dni} o {map_nombre}.")
+              # Validar solo el nombre como campo requerido
+              if not nombre:
+                  st.warning(f"Fila {index+2} omitida por falta de nombre.")
                   continue
+
+              # Si no hay ID, generamos uno basado en el índice
+              if not num_id:
+                  num_id = f"ID_{nombre_compania[:3]}_{index}"
 
               # --- Crear la fila con la estructura estándar ---
               fila_nueva = [
