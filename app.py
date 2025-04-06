@@ -151,8 +151,9 @@ else:
                       key=f"company_name_{uploaded_file.file_id}" # Clave única por archivo
                   )
                   if nombre: # Solo procesar si el usuario ingresó un nombre
-                       nombres_companias[uploaded_file] = nombre.strip()
-                       
+                       # Usar file_id como clave y guardar nombre y objeto archivo
+                       nombres_companias[uploaded_file.file_id] = {"name": nombre.strip(), "file": uploaded_file}
+
               if st.button("Procesar Archivos Cargados", disabled=(len(nombres_companias) != len(uploaded_files))):
                   if len(nombres_companias) == 0:
                        st.warning("Asegúrate de asignar un nombre de Compañía/Hoja a cada archivo subido.")
@@ -163,9 +164,12 @@ else:
                       grand_total_agregados = 0
                       grand_total_actualizados = 0
 
-                      for uploaded_file, nombre_hoja in nombres_companias.items():
+                      # Iterar sobre el diccionario usando file_id como clave
+                      for file_id, data in nombres_companias.items():
+                          uploaded_file = data["file"] # Obtener el objeto archivo
+                          nombre_hoja = data["name"]   # Obtener el nombre de la hoja
                           st.markdown(f"**Procesando: {uploaded_file.name} para la hoja '{nombre_hoja}'**")
-                          
+
                           with st.spinner(f"Leyendo y procesando '{uploaded_file.name}'..."):
                               df_compania = leer_excel_subido(uploaded_file)
 
