@@ -147,8 +147,8 @@ else:
                   
                   nombre = st.text_input(
                       f"Nombre de la Compañía/Hoja para '{uploaded_file.name}'",
-                      value=suggested_name_clean, 
-                      key=f"company_name_{uploaded_file.id}" # Clave única por archivo
+                      value=suggested_name_clean,
+                      key=f"company_name_{uploaded_file.file_id}" # Clave única por archivo
                   )
                   if nombre: # Solo procesar si el usuario ingresó un nombre
                        nombres_companias[uploaded_file] = nombre.strip()
