@@ -48,14 +48,39 @@ def preparar_datos_para_hoja(df_compania, nombre_compania):
       columnas_df = df_compania.columns.str.lower().tolist() # Nombres de columna en minúsculas
       
       # Mapeo de columnas esperado (ejemplos, ¡ajústalos!)
-      map_dni = 'dni' if 'dni' in columnas_df else 'dni_cliente' if 'dni_cliente' in columnas_df else None
-      map_nombre = 'nombre' if 'nombre' in columnas_df else 'nombre completo' if 'nombre completo' in columnas_df else 'apellido y nombre' if 'apellido y nombre' in columnas_df else None
-      map_tel = 'telefono' if 'telefono' in columnas_df else 'tel' if 'tel' in columnas_df else 'celular' if 'celular' in columnas_df else None
-      map_id_comp = 'id_cliente' if 'id_cliente' in columnas_df else 'nro cliente' if 'nro cliente' in columnas_df else None
-      map_email = 'email' if 'email' in columnas_df else 'correo' if 'correo' in columnas_df else None
-      map_tipo_id = 'tipo doc' if 'tipo doc' in columnas_df else None # Si tienes esta info
-      
-      # Validar que las columnas mínimas existan
+      # Priorizar nombres comunes, luego agregar los específicos de 'resultadosPolizas'
+      map_dni = None
+      if 'dni' in columnas_df: map_dni = 'dni'
+      elif 'dni_cliente' in columnas_df: map_dni = 'dni_cliente'
+      elif 'nro. de contrato' in columnas_df: map_dni = 'nro. de contrato' # Usar nro. contrato como ID si no hay DNI
+
+      map_nombre = None
+      if 'nombre' in columnas_df: map_nombre = 'nombre'
+      elif 'nombre completo' in columnas_df: map_nombre = 'nombre completo'
+      elif 'apellido y nombre' in columnas_df: map_nombre = 'apellido y nombre'
+      elif 'tomador' in columnas_df: map_nombre = 'tomador' # Usar tomador como nombre
+
+      map_tel = None
+      if 'telefono' in columnas_df: map_tel = 'telefono'
+      elif 'tel' in columnas_df: map_tel = 'tel'
+      elif 'celular' in columnas_df: map_tel = 'celular'
+      # Añadir aquí si 'resultadosPolizas' tiene columna de teléfono con otro nombre
+
+      map_id_comp = None
+      if 'id_cliente' in columnas_df: map_id_comp = 'id_cliente'
+      elif 'nro cliente' in columnas_df: map_id_comp = 'nro cliente'
+      elif 'nro. de póliza' in columnas_df: map_id_comp = 'nro. de póliza' # Usar nro. póliza como ID compañía
+
+      map_email = None
+      if 'email' in columnas_df: map_email = 'email'
+      elif 'correo' in columnas_df: map_email = 'correo'
+      # Añadir aquí si 'resultadosPolizas' tiene columna de email con otro nombre
+
+      map_tipo_id = None
+      if 'tipo doc' in columnas_df: map_tipo_id = 'tipo doc'
+      # Añadir aquí si 'resultadosPolizas' tiene columna de tipo doc con otro nombre
+
+      # Validar que las columnas mínimas existan (ahora busca 'tomador' y 'nro. de contrato' también)
       if not map_dni or not map_nombre:
            st.error(f"¡Error crítico! No se encontraron columnas de DNI o Nombre en el Excel de {nombre_compania}. Columnas encontradas: {columnas_df}")
            return [] # Devolver vacío si no hay datos esenciales
