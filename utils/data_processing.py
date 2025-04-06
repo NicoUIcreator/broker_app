@@ -91,8 +91,8 @@ def preparar_datos_para_hoja(df_compania, nombre_compania):
 
       for index, row in df_compania.iterrows():
           try:
-              # Extraer datos - generamos ID automático siempre usando prefijo de compañía
-              num_id = f"ID_{nombre_compania[:3]}_{index}"
+              # Generar ID consistente con formato: ID_COMP_0001 
+              num_id = f"ID_{nombre_compania[:3].upper()}_{index+1:04d}"  # 4-digit zero-padded
               nombre = str(row[map_nombre]) if map_nombre and pd.notna(row[map_nombre]) else ''
               telefono1 = str(row[map_tel]) if map_tel and pd.notna(row[map_tel]) else ''
               id_cliente_compania = str(row[map_id_comp]) if map_id_comp and pd.notna(row[map_id_comp]) else ''

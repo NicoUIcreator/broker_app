@@ -138,8 +138,8 @@ else:
 
           if uploaded_files:
               # Pedir nombre de compañía para cada archivo
-              nombres_companias = {}
-              for uploaded_file in uploaded_files:
+              nombres_companias = []
+              for idx, uploaded_file in enumerate(uploaded_files):
                   # Sugerir nombre basado en el archivo (sin extensión)
                   suggested_name = uploaded_file.name.split('.')[0]
                   # Limpiar nombre sugerido (reemplazar caracteres no alfanuméricos)
@@ -148,11 +148,13 @@ else:
                   nombre = st.text_input(
                       f"Nombre de la Compañía/Hoja para '{uploaded_file.name}'",
                       value=suggested_name_clean,
-                      key=f"company_name_{uploaded_file.file_id}" # Clave única por archivo
+                      key=f"company_name_{idx}" # Usar índice simple
                   )
                   if nombre: # Solo procesar si el usuario ingresó un nombre
-                       # Usar file_id como clave y guardar nombre y objeto archivo
-                       nombres_companias[uploaded_file.file_id] = {"name": nombre.strip(), "file": uploaded_file}
+                       nombres_companias.append({
+                           "name": nombre.strip(),
+                           "file": uploaded_file
+                       })
 
               if st.button("Procesar Archivos Cargados", disabled=(len(nombres_companias) != len(uploaded_files))):
                   if len(nombres_companias) == 0:
@@ -164,10 +166,10 @@ else:
                       grand_total_agregados = 0
                       grand_total_actualizados = 0
 
-                      # Iterar sobre el diccionario usando file_id como clave
-                      for file_id, data in nombres_companias.items():
-                          uploaded_file = data["file"] # Obtener el objeto archivo
-                          nombre_hoja = data["name"]   # Obtener el nombre de la hoja
+                      # Iterar sobre la lista de archivos
+                      for data in nombres_companias:
+                          uploaded_file = data["file"]
+                          nombre_hoja = data["name"]
                           st.markdown(f"**Procesando: {uploaded_file.name} para la hoja '{nombre_hoja}'**")
 
                           with st.spinner(f"Leyendo y procesando '{uploaded_file.name}'..."):
