@@ -137,24 +137,33 @@ else:
           )
 
           if uploaded_files:
-              # Pedir nombre de compañía para cada archivo
+              # Pedir nombre de compañía para cada archivo usando el índice solamente
               nombres_companias = []
-              for idx, uploaded_file in enumerate(uploaded_files):
-                  # Sugerir nombre basado en el archivo (sin extensión)
-                  suggested_name = uploaded_file.name.split('.')[0]
-                  # Limpiar nombre sugerido (reemplazar caracteres no alfanuméricos)
-                  suggested_name_clean = ''.join(e for e in suggested_name if e.isalnum() or e.isspace()).strip()
-                  
-                  nombre = st.text_input(
-                      f"Nombre de la Compañía/Hoja para '{uploaded_file.name}'",
-                      value=suggested_name_clean,
-                      key=f"company_name_{idx}" # Usar índice simple
-                  )
-                  if nombre: # Solo procesar si el usuario ingresó un nombre
-                       nombres_companias.append({
-                           "name": nombre.strip(),
-                           "file": uploaded_file
-                       })
+              for file_idx, uploaded_file in enumerate(uploaded_files):
+                  try:
+                      # Extraer nombre limpio del archivo
+                      file_name = uploaded_file.name.split('.')[0]
+                      clean_name = ''.join(c for c in file_name if c.isalnum() or c.isspace()).strip()
+                      
+                      # Crear input usando solo el índice para la clave
+                      nombre = st.text_input(
+                          f"Nombre para '{uploaded_file.name}'",
+                          value=clean_name,
+                          key=f"file_{file_idx}"  # Simple index-based key
+                      )
+                      
+                      if nombre and nombre.strip():
+                          nombres_companias.append({
+                              "name": nombre.strip(),
+                              "file": uploaded_file
+                          })
+                  except Exception as e:
+                      st.error(f"Error al procesar archivo: {str(e)}")
+                      continue
+
+              if not nombres_companias:
+                  st.warning("No se asignaron nombres válidos a los archivos")
+                  st.stop()  # Use st.stop() instead of return outside a function
 
               if st.button("Procesar Archivos Cargados", disabled=(len(nombres_companias) != len(uploaded_files))):
                   if len(nombres_companias) == 0:
